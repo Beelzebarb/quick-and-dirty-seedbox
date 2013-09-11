@@ -2,6 +2,7 @@
 
 import sys, os, subprocess, getpass
 
+
 user = None
 passwd = None
 ipaddr = None
@@ -33,7 +34,7 @@ def getString(label, ispassword=False, default=None):
 			else:
 				return newvar
 
-def runCommand(com):
+def exc(com):
 	p = subprocess.Popen(com, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 	(output, err) = p.communicate()
 	if err == "":
@@ -42,87 +43,106 @@ def runCommand(com):
 		return err
 		print "Error: (" + str(err) + ")"
 
-def createSSLCACert(service):
+def createSSLCACert():
 	global user, passwd, ipaddr
-	runCommand("cd /etc/qadsb/")
-	runCommand("rm -r /etc/qadsb/ssl/CA")
-	runCommand("mkdir -p /etc/qadsb/ssl/CA/newcerts")
-	runCommand("mkdir -p /etc/qadsb/ssl/CA/private")
-	runCommand("cd /etc/qadsb/ssl/CA")
+	exc("cd /etc/qadsb/")
+	exc("rm -r /etc/qadsb/ssl/CA")
+	exc("mkdir -p /etc/qadsb/ssl/CA/newcerts")
+	exc("mkdir -p /etc/qadsb/ssl/CA/private")
+	exc("cd /etc/qadsb/ssl/CA")
 	
-	runCommand("echo '01' > serial  && touch index.txt")
-	runCommand("cp /etc/qadsb/root.ca.cacert.conf.template /etc/qadsb/ssl/CA/caconfig.cnf")
-	runCommand("perl -pi -e \"s/<username>/"+user+"/g\" /etc/qadsb/ssl/CA/caconfig.cnf")
-	runCommand("perl -pi -e \"s/<servername>/"+ipaddr+"/g\" /etc/qadsb/ssl/CA/caconfig.cnf")
+	exc("echo '01' > serial  && touch index.txt")
+	exc("cp /etc/qadsb/root.ca.cacert.conf.template /etc/qadsb/ssl/CA/caconfig.cnf")
+	exc("perl -pi -e \"s/<username>/"+user+"/g\" /etc/qadsb/ssl/CA/caconfig.cnf")
+	exc("perl -pi -e \"s/<servername>/"+ipaddr+"/g\" /etc/qadsb/ssl/CA/caconfig.cnf")
 	
-	runCommand("openssl req -new -x509 -extensions v3_ca -keyout private/cakey.pem -passout pass:"+passwd+" -out cacert.pem -days 3650 -config /etc/qadsb/ssl/CA/caconfig.cnf")
-	runCommand("openssl req -new -nodes -out /etc/qadsb/ssl/CA/req.pem -passout pass:"+passwd+" -config /etc/qadsb/ssl/CA/caconfig.cnf")
-	runCommand("openssl ca -batch -out /etc/qadsb/ssl/CA/cert.pem -config /etc/qadsb/ssl/CA/caconfig.cnf -passin pass:"+passwd+" -infiles /etc/qadsb/ssl/CA/req.pem")
-	runCommand("mv /etc/qadsb/ssl/CA/cert.pem /etc/qadsb/ssl/CA/tmp.pem")
-	runCommand("openssl x509 -in /etc/qadsb/ssl/CA/tmp.pem -out /etc/qadsb/ssl/CA/cert.pem")
-	runCommand("cat /etc/qadsb/ssl/CA/key.pem /etc/qadsb/ssl/CA/cert.pem > /etc/qadsb/ssl/CA/key-cert.pem")
+	exc("openssl req -new -x509 -extensions v3_ca -keyout private/cakey.pem -passout pass:"+passwd+" -out cacert.pem -days 3650 -config /etc/qadsb/ssl/CA/caconfig.cnf")
+	exc("openssl req -new -nodes -out /etc/qadsb/ssl/CA/req.pem -passout pass:"+passwd+" -config /etc/qadsb/ssl/CA/caconfig.cnf")
+	exc("openssl ca -batch -out /etc/qadsb/ssl/CA/cert.pem -config /etc/qadsb/ssl/CA/caconfig.cnf -passin pass:"+passwd+" -infiles /etc/qadsb/ssl/CA/req.pem")
+	exc("mv /etc/qadsb/ssl/CA/cert.pem /etc/qadsb/ssl/CA/tmp.pem")
+	exc("openssl x509 -in /etc/qadsb/ssl/CA/tmp.pem -out /etc/qadsb/ssl/CA/cert.pem")
+	exc("cat /etc/qadsb/ssl/CA/key.pem /etc/qadsb/ssl/CA/cert.pem > /etc/qadsb/ssl/CA/key-cert.pem")
 	
-	runCommand("cp /etc/qadsb/ssl/CA/cacert.pem /etc/qadsb/ssl")
-	runCommand("cp /etc/qadsb/ssl/CA/cert.pem /etc/qadsb/ssl")
-	runCommand("cp /etc/qadsb/ssl/CA/key-cert.pem /etc/qadsb/ssl")
-	runCommand("cp /etc/qadsb/ssl/CA/key.pem /etc/qadsb/ssl")
-	runCommand("cp /etc/qadsb/ssl/CA/private/cakey.pem /etc/qadsb/ssl")
-	runCommand("cp /etc/qadsb/ssl/CA/req.pem /etc/qadsb/ssl")
+	exc("cp /etc/qadsb/ssl/CA/cacert.pem /etc/qadsb/ssl")
+	exc("cp /etc/qadsb/ssl/CA/cert.pem /etc/qadsb/ssl")
+	exc("cp /etc/qadsb/ssl/CA/key-cert.pem /etc/qadsb/ssl")
+	exc("cp /etc/qadsb/ssl/CA/key.pem /etc/qadsb/ssl")
+	exc("cp /etc/qadsb/ssl/CA/private/cakey.pem /etc/qadsb/ssl")
+	exc("cp /etc/qadsb/ssl/CA/req.pem /etc/qadsb/ssl")
 	
-	runCommand("chmod 600 /etc/qadsb/ssl/*")
-	runCommand("chmod 644 /etc/qadsb/ssl/cert.pem")
-	runCommand("chmod 644 /etc/qadsb/ssl/key.pem")
+	exc("chmod 600 /etc/qadsb/ssl/*")
+	exc("chmod 644 /etc/qadsb/ssl/cert.pem")
+	exc("chmod 644 /etc/qadsb/ssl/key.pem")
 	
 
 def setupDirectory():
-	runCommand("rm -f -r /etc/qadsb")
-	runCommand("mkdir -p /etc/qadsb")
-	runCommand("mkdir -p cd /etc/qadsb/source")
-	runCommand("mkdir -p cd /etc/qadsb/users")
+	print "Setting up directories and grabbing git repository..."
+	exc("rm -f -r /etc/qadsb")
+	exc("git clone http://www.github.com/Beelzebarb/quick-and-dirty-seedbox.git /etc/qadsb")
+	exc("mkdir -p cd /etc/qadsb/source")
+	exc("mkdir -p cd /etc/qadsb/users")
 
 def installFTP():
-	runCommand("mkdir -p /etc/ssl/private/")
-	runCommand("openssl req -x509 -nodes -days 365 -newkey rsa:1024 -keyout /etc/ssl/private/vsftpd.pem -out /etc/ssl/private/vsftpd.pem -config /etc/qadsb/ssl/CA/caconfig.cnf")
-	result = runCommand("apt-get --yes install vsftpd")
+	print "Installing vsftpd and creating ssl certificates..."
+	exc("mkdir -p /etc/ssl/private/")
+	exc("openssl req -x509 -nodes -days 365 -newkey rsa:1024 -keyout /etc/ssl/private/vsftpd.pem -out /etc/ssl/private/vsftpd.pem -config /etc/qadsb/ssl/CA/caconfig.cnf")
+	result = exc("apt-get --yes install vsftpd")
 	if result == True:
 		return True
 	else:
 		return False
 
+def installFail2Ban():
+	print "Installing and configuring fail2ban..."
+	if exc("apt-get --yes install fail2ban") == True:
+		exc("cp /etc/fail2ban/jail.conf /etc/fail2ban/jail.conf.original")
+		exc("cp /etc/qadsb/etc.fail2ban.jail.conf.template /etc/fail2ban/jail.conf")
+		exc("fail2ban-client reload")
+
+def installTransmission():
+	global user, passwd
+	print "Installing transmission-cli..."
+	result = exc("apt-get --yes install transmission-cli transmission-daemon transmission-common")
+	if result == True:
+		exc("transmission-daemon -f -t -u "+user+" -v "+passwd+" -w /path/to/downloaded/torrents -g /etc/transmission-daemon/")
+	
+
 def configFTP():
 	global ftpport
-	runCommand("perl -pi -e \"s/anonymous_enable\=YES/\#anonymous_enable\=YES/g\" /etc/vsftpd.conf")
-	runCommand("perl -pi -e \"s/connect_from_port_20\=YES/#connect_from_port_20\=YES/g\" /etc/vsftpd.conf")
-	runCommand("echo \"listen_port="+ftpport+"\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"ssl_enable=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"allow_anon_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"force_local_data_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"force_local_logins_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"ssl_tlsv1=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"ssl_sslv2=NO\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"ssl_sslv3=NO\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"require_ssl_reuse=NO\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"ssl_ciphers=HIGH\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"rsa_cert_file=/etc/ssl/private/vsftpd.pem\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"local_enable=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"write_enable=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"local_umask=022\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"chroot_local_user=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
-	runCommand("echo \"chroot_list_file=/etc/vsftpd.chroot_list\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	print "Configuring vsftpd..."
+	exc("perl -pi -e \"s/anonymous_enable\=YES/\#anonymous_enable\=YES/g\" /etc/vsftpd.conf")
+	exc("perl -pi -e \"s/connect_from_port_20\=YES/#connect_from_port_20\=YES/g\" /etc/vsftpd.conf")
+	exc("echo \"listen_port="+ftpport+"\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"ssl_enable=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"allow_anon_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"force_local_data_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"force_local_logins_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"ssl_tlsv1=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"ssl_sslv2=NO\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"ssl_sslv3=NO\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"require_ssl_reuse=NO\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"ssl_ciphers=HIGH\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"rsa_cert_file=/etc/ssl/private/vsftpd.pem\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"local_enable=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"write_enable=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"local_umask=022\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"chroot_local_user=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"chroot_list_file=/etc/vsftpd.chroot_list\" | tee -a /etc/vsftpd.conf >> /dev/null")
 
 def configSSH():
 	global sshport
-	runCommand("perl -pi -e \"s/Port 22/Port "+sshport+"1/g\" /etc/ssh/sshd_config")
-	runCommand("perl -pi -e \"s/PermitRootLogin yes/PermitRootLogin no/g\" /etc/ssh/sshd_config")
-	runCommand("perl -pi -e \"s/#Protocol 2/Protocol 2/g\" /etc/ssh/sshd_config")
-	runCommand("perl -pi -e \"s/X11Forwarding yes/X11Forwarding no/g\" /etc/ssh/sshd_config")
-	runCommand("groupadd sshdusers")
-	runCommand("echo \"\" | tee -a /etc/ssh/sshd_config > /dev/null")
-	runCommand("echo \"UseDNS no\" | tee -a /etc/ssh/sshd_config > /dev/null")
-	runCommand("echo \"AllowGroups sshdusers\" >> /etc/ssh/sshd_config")
-	runCommand("mkdir -p /usr/share/terminfo/l/")
-	runCommand("cp /lib/terminfo/l/linux /usr/share/terminfo/l/")
-	runCommand("service ssh restart")
+	print "Configuring ssh for secure access..."
+	exc("perl -pi -e \"s/Port 22/Port "+sshport+"1/g\" /etc/ssh/sshd_config")
+	exc("perl -pi -e \"s/PermitRootLogin yes/PermitRootLogin no/g\" /etc/ssh/sshd_config")
+	exc("perl -pi -e \"s/#Protocol 2/Protocol 2/g\" /etc/ssh/sshd_config")
+	exc("perl -pi -e \"s/X11Forwarding yes/X11Forwarding no/g\" /etc/ssh/sshd_config")
+	exc("groupadd sshdusers")
+	exc("echo \"\" | tee -a /etc/ssh/sshd_config > /dev/null")
+	exc("echo \"UseDNS no\" | tee -a /etc/ssh/sshd_config > /dev/null")
+	exc("echo \"AllowGroups sshdusers\" >> /etc/ssh/sshd_config")
+	exc("mkdir -p /usr/share/terminfo/l/")
+	exc("cp /lib/terminfo/l/linux /usr/share/terminfo/l/")
+	exc("service ssh restart")
 
 def getVars():
 	global user, passwd, ipaddr, sshport, ftpport
@@ -136,7 +156,7 @@ def outputBeginning():
 	print "#"
 	print "#"
 	print "# The quick and dirty seedbox script"
-	print "#   By Beelzebarb"
+	print "#   By Beelzebarb
 	print "#"
 	print "#"
 	print "#"
@@ -149,6 +169,11 @@ def main():
 		sys.exit("This script must be run as root")
 	setupDirectory()
 	getVars()
+	installFail2Ban()
+	createSSLCACert()
+	installFTP()
+	configFTP()
+	configSSH()
 
 if __name__ == "__main__":
 	main()
