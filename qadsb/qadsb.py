@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 
-import sys, os, subprocess, getpass
-
+import sys, os, subprocess, getpass, crypt, json, random
 
 user = None
 passwd = None
 ipaddr = None
 sshport = None
+torrentport = None
 ftpport = None
+settingspath = None
+settings = None
 
 def getString(label, ispassword=False, default=None):
 	pass1 = ""
@@ -33,6 +35,19 @@ def getString(label, ispassword=False, default=None):
 				continue
 			else:
 				return newvar
+
+def getSettings():
+	global user, settingspath, settings
+	base = "/home/"+user+"/.config/transmission"
+	if settingspath == None:
+		settingspath = base + "-daemon/settings.json"
+	with open(settingspath, 'rb') as fp:
+		settings = json.load(fp)
+
+def setSettings():
+	global settingspath, settings
+	with open(settingspath, 'wb') as fp:
+		json.dump(settings, fp)
 
 def exc(com):
 	p = subprocess.Popen(com, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -73,14 +88,17 @@ def createSSLCACert():
 	exc("chmod 600 /etc/qadsb/ssl/*")
 	exc("chmod 644 /etc/qadsb/ssl/cert.pem")
 	exc("chmod 644 /etc/qadsb/ssl/key.pem")
-	
 
 def setupDirectory():
 	print "Setting up directories and grabbing git repository..."
 	exc("rm -f -r /etc/qadsb")
-	exc("git clone http://www.github.com/Beelzebarb/quick-and-dirty-seedbox.git /etc/qadsb")
-	exc("mkdir -p cd /etc/qadsb/source")
-	exc("mkdir -p cd /etc/qadsb/users")
+	exc("apt-get --yes install git")
+	result = exc("git clone http://www.github.com/Beelzebarb/quick-and-dirty-seedbox.git /etc/qadsb")
+	if result != True:
+		print "There seems to be a problem with the github repository, without this, the script will not work, exiting now."
+		sys.exit(1)
+	exc("mv /etc/qadsb/qadsb/* /etc/qadsb")
+	exc("rm -r /etc/qadsb/qadsb")
 
 def installFTP():
 	print "Installing vsftpd and creating ssl certificates..."
@@ -101,18 +119,82 @@ def installFail2Ban():
 
 def installTransmission():
 	global user, passwd
-	print "Installing transmission-cli..."
+	print "Installing transmission-daemon..."
 	result = exc("apt-get --yes install transmission-cli transmission-daemon transmission-common")
 	if result == True:
-		exc("transmission-daemon -f -t -u "+user+" -v "+passwd+" -w /path/to/downloaded/torrents -g /etc/transmission-daemon/")
-	
+		res2 = engageTransmission()
+		if res2 == True:
+			print "Installation successful, service running, grabbing settings file..."
+			if setTransmissionConfig() == True:
+				print "Settings file retreived, parsing now..."
+				getSettings()
+			else:
+				print "Settings file failed to load, error, exiting script."
+				sys.exit(1)
+	else:
+		print "ERROR: " + str(result) + ", exiting script."
+		sys.exit(1)
+
+def engageTransmission():
+	result = subprocess.check_output(['ps', '-A'])
+	if not 'transmission-da' in result:
+		exc("service transmission-daemon start")
+	elif 'transmission-da' in result:
+		exc("service transmission-daemon restart")
+	res2 = subprocess.check_output(['ps', '-A'])
+	if 'transmission-da' in res2:
+		return True
+	else:
+		return False
+
+def setTransmissionConfig():
+	global settingspath
+	path = "/home/"+user+"/.config/transmission-daemon"
+	exc("export TRANSMISSION_HOME="+path)
+	if not os.path.exists(path):
+		exc("mkdir -p "+path)
+		exc("cp /etc/qadsb/trans-config/settings.json " + path + "/settings.json")
+		if os.path.exists(path + "/settings.json"):
+			exc("chown -R "+user+":"+user+" /home/"+user+"/.config/transmission-daemon/*")
+			return True
+		else:
+			return False
+	else:
+		if os.path.exists(path + "/settings.json") == False:
+			exc("cp /etc/qadsb/trans-config/settings.json " + path + "/settings.json")
+			if os.path.exists(path + "/settings.json"):
+				exc("chown -R "+user+":"+user+" /home/"+user+"/.config/transmission-daemon/*")
+				return True
+			else:
+				return False
+		else:
+			exc("chown -R "+user+":"+user+" /home/"+user+"/.config/transmission-daemon/*")
+			return True
+
+def configTransmission():
+	global settings, user, passwd, torrentport
+	print "Configuring transmission...",
+	settings['download-dir'] = "/home/"+user+"/Downloads"
+	settings['watch-dir'] = "/home/"+user+"/torrents"
+	settings['watch-dir-enabled'] = True
+	settings['rpc-username'] = user
+	settings['rpc-password'] = passwd
+	settings['rpc-enabled'] = True
+	settings['peer-limit-global'] = 1024
+	settings['peer-limit-torrent'] = 1024
+	settings['peer-port'] = torrentport
+	settings['encryption'] = 1
+	settings['ratio-limit-enabled'] = False
+	setSettings()
+	print "done, restarted the service..."
+	exc("service transmission-daemon restart")
 
 def configFTP():
 	global ftpport
 	print "Configuring vsftpd..."
 	exc("perl -pi -e \"s/anonymous_enable\=YES/\#anonymous_enable\=YES/g\" /etc/vsftpd.conf")
 	exc("perl -pi -e \"s/connect_from_port_20\=YES/#connect_from_port_20\=YES/g\" /etc/vsftpd.conf")
-	exc("echo \"listen_port="+ftpport+"\" | tee -a /etc/vsftpd.conf >> /dev/null")
+	exc("echo \"listen_port="+str(ftpport)+"\" | tee -a /etc/vsftpd.conf >> /dev/null")
 	exc("echo \"ssl_enable=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
 	exc("echo \"allow_anon_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
 	exc("echo \"force_local_data_ssl=YES\" | tee -a /etc/vsftpd.conf >> /dev/null")
@@ -131,8 +213,8 @@ def configFTP():
 
 def configSSH():
 	global sshport
-	print "Configuring ssh for secure access..."
-	exc("perl -pi -e \"s/Port 22/Port "+sshport+"1/g\" /etc/ssh/sshd_config")
+	print "Configuring ssh for optimal security..."
+	exc("perl -pi -e \"s/Port 22/Port "+str(sshport)+"1/g\" /etc/ssh/sshd_config")
 	exc("perl -pi -e \"s/PermitRootLogin yes/PermitRootLogin no/g\" /etc/ssh/sshd_config")
 	exc("perl -pi -e \"s/#Protocol 2/Protocol 2/g\" /etc/ssh/sshd_config")
 	exc("perl -pi -e \"s/X11Forwarding yes/X11Forwarding no/g\" /etc/ssh/sshd_config")
@@ -144,36 +226,48 @@ def configSSH():
 	exc("cp /lib/terminfo/l/linux /usr/share/terminfo/l/")
 	exc("service ssh restart")
 
+def createUser():
+	global user, passwd
+	print "Creating user " + user + "..."
+	shapasswd = crypt.crypt(passwd, "22")
+	exc("useradd -m -p "+shapasswd+" "+user)
+	exc("mkdir /home/"+user+"/torrents")
+	exc("mkdir /home/"+user+"/Downloads")
+	exc("chown -R " + user + ":" + user + " /home/" + user + "/*")
+	exc("usermod -a -G sshdusers " + user)
+
 def getVars():
-	global user, passwd, ipaddr, sshport, ftpport
+	global user, passwd, ipaddr, sshport, ftpport, torrentport
 	user = getString("You must create a new user for the seedbox, enter a username: ")
 	passwd = getString("Please enter a password for " + user + ": ", True)
 	ipaddr = getString("IP Address of your seedbox: ", False, "127.0.0.1")
-	sshport = getString("Enter the port number you wish to use for SSH (Usually 22): ", False, 22)
-	ftpport = getString("FTP Port number to use (Usually 21): ", False, 21)
+	sshport = int(getString("Enter the port number you wish to use for SSH (Usually 22): ", False, 22))
+	ftpport = int(getString("FTP Port number to use (Usually 21): ", False, 21))
+	torrentport = int(getString("Port for torrents (Must be above 49152, leave blank for random): ", False, random.randint(49152, 65535)))
 
 def outputBeginning():
 	print "#"
 	print "#"
 	print "# The quick and dirty seedbox script"
-	print "#   By Beelzebarb
+	print "#   By Beelzebarb"
 	print "#"
 	print "#"
 	print "#"
 	print ""
 
 def main():
-	global user, passwd, ipaddr, sshport, ftpport
 	outputBeginning()
 	if not os.geteuid() == 0: # User didn't run script with root privilegdes
 		sys.exit("This script must be run as root")
 	setupDirectory()
 	getVars()
-	installFail2Ban()
+	createUser()
+	#installFail2Ban()
 	createSSLCACert()
 	installFTP()
 	configFTP()
-	configSSH()
-
+	#installTransmission()
+	#configTransmission()
+	#configSSH()
 if __name__ == "__main__":
 	main()
